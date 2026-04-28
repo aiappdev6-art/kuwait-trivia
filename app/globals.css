@@ -840,6 +840,27 @@ footer .credit {
   letter-spacing: 0.4em;
   color: var(--gold);
   margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+.q-tag {
+  font-family: "Tajawal", sans-serif;
+  font-size: 0.62rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid rgba(200, 169, 110, 0.4);
+  color: var(--gold-soft);
+  border-radius: 2px;
+}
+.quiz-error {
+  margin-top: 2rem;
+  padding: 2rem;
+  border: 1px dashed rgba(200, 169, 110, 0.3);
+  text-align: center;
+  color: rgba(232, 223, 200, 0.7);
+  font-style: italic;
 }
 .q-text {
   font-size: 1.45rem;

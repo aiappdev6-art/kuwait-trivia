@@ -1,154 +1,101 @@
-"use client";
-import { useMemo, useState } from "react";
+import TriviaQuiz, { type Question } from "./TriviaQuiz";
 
-type Question = {
-  q: string;
-  options: string[];
-  answer: number;
-  fact: string;
+type OpenTdbResponse = {
+  response_code: number;
+  results: {
+    category: string;
+    type: string;
+    difficulty: string;
+    question: string;
+    correct_answer: string;
+    incorrect_answers: string[];
+  }[];
 };
 
-const QUESTIONS: Question[] = [
-  {
-    q: "In which year did Kuwait gain independence from the United Kingdom?",
-    options: ["1945", "1952", "1961", "1971"],
-    answer: 2,
-    fact: "Kuwait declared full sovereignty on 19 June 1961.",
-  },
-  {
-    q: "What is the official currency of Kuwait?",
-    options: ["Saudi Riyal", "Kuwaiti Dinar", "UAE Dirham", "Qatari Riyal"],
-    answer: 1,
-    fact: "The Kuwaiti Dinar (KWD) is consistently among the world's highest-valued currencies.",
-  },
-  {
-    q: "How many governorates make up the State of Kuwait?",
-    options: ["4", "5", "6", "7"],
-    answer: 2,
-    fact: "Capital, Hawalli, Farwaniya, Mubarak Al-Kabeer, Ahmadi, and Jahra.",
-  },
-  {
-    q: "Which year marks the discovery of oil in Kuwait's Burgan field?",
-    options: ["1928", "1938", "1948", "1958"],
-    answer: 1,
-    fact: "Discovered in 1938, Burgan is one of the largest oil fields on Earth.",
-  },
-  {
-    q: "When is Kuwait's National Day celebrated?",
-    options: ["19 June", "25 February", "26 February", "2 August"],
-    answer: 1,
-    fact: "National Day falls on 25 February, the day Sheikh Abdullah Al-Salem ascended in 1950.",
-  },
-];
+const API_URL =
+  "https://opentdb.com/api.php?amount=10&category=22&difficulty=easy&type=multiple";
 
-export default function Trivia() {
-  const [picks, setPicks] = useState<(number | null)[]>(
-    () => Array(QUESTIONS.length).fill(null)
-  );
-  const [submitted, setSubmitted] = useState(false);
+// Decode HTML entities returned by Open Trivia DB (&quot; &#039; &amp; etc.)
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&eacute;/g, "é")
+    .replace(/&ouml;/g, "ö")
+    .replace(/&uuml;/g, "ü")
+    .replace(/&aacute;/g, "á")
+    .replace(/&iacute;/g, "í")
+    .replace(/&oacute;/g, "ó")
+    .replace(/&ntilde;/g, "ñ")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+}
 
-  const score = useMemo(
-    () => picks.reduce<number>((s, p, i) => s + (p === QUESTIONS[i].answer ? 1 : 0), 0),
-    [picks]
-  );
-  const allAnswered = picks.every((p) => p !== null);
+// Deterministic shuffle would be nicer for hydration but content already
+// comes only from the server, so a plain shuffle is safe here.
+function shuffle<T>(arr: T[]): T[] {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
 
-  const choose = (qi: number, oi: number) => {
-    if (submitted) return;
-    setPicks((prev) => {
-      const next = [...prev];
-      next[qi] = oi;
-      return next;
+async function loadQuestions(): Promise<Question[] | null> {
+  try {
+    const res = await fetch(API_URL, { cache: "no-store" });
+    if (!res.ok) return null;
+    const data = (await res.json()) as OpenTdbResponse;
+    if (data.response_code !== 0 || !data.results?.length) return null;
+
+    return data.results.map((r) => {
+      const correct = decodeEntities(r.correct_answer);
+      const options = shuffle([
+        correct,
+        ...r.incorrect_answers.map(decodeEntities),
+      ]);
+      return {
+        q: decodeEntities(r.question),
+        options,
+        answer: options.indexOf(correct),
+        category: decodeEntities(r.category),
+        difficulty: r.difficulty,
+      };
     });
-  };
+  } catch {
+    return null;
+  }
+}
 
-  const reset = () => {
-    setPicks(Array(QUESTIONS.length).fill(null));
-    setSubmitted(false);
-  };
+export default async function Trivia() {
+  const questions = await loadQuestions();
 
   return (
     <section id="trivia" className="trivia">
       <div className="container">
         <div className="reveal">
           <div className="section-label">01 — Test Your Knowledge</div>
-          <h2 className="section-title">How Well Do You Know Kuwait?</h2>
+          <h2 className="section-title">A Geography Quiz, Live from the Wire</h2>
           <p className="section-lede">
-            Five questions, one badge of honor. No hints — just instinct,
-            memory, and a little luck.
+            Ten fresh questions pulled straight from the Open Trivia Database —
+            different every visit. Pick wisely, then reveal your score.
           </p>
         </div>
 
-        <div className="quiz reveal">
-          {QUESTIONS.map((q, qi) => {
-            const pick = picks[qi];
-            return (
-              <div className="quiz-card" key={qi}>
-                <div className="q-num">Q{qi + 1}</div>
-                <h3 className="q-text">{q.q}</h3>
-                <div className="opts">
-                  {q.options.map((opt, oi) => {
-                    const isPicked = pick === oi;
-                    const isCorrect = q.answer === oi;
-                    let cls = "opt";
-                    if (submitted) {
-                      if (isCorrect) cls += " correct";
-                      else if (isPicked) cls += " wrong";
-                    } else if (isPicked) cls += " picked";
-                    return (
-                      <button
-                        type="button"
-                        key={oi}
-                        className={cls}
-                        onClick={() => choose(qi, oi)}
-                        disabled={submitted}
-                      >
-                        <span className="dot" />
-                        <span>{opt}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                {submitted && (
-                  <div className="fact">
-                    <span className="fact-tag">
-                      {pick === q.answer ? "✓ Correct" : "✕ Not quite"}
-                    </span>
-                    {q.fact}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          <div className="quiz-actions">
-            {!submitted ? (
-              <button
-                className="btn-primary"
-                disabled={!allAnswered}
-                onClick={() => setSubmitted(true)}
-              >
-                Reveal Score
-              </button>
-            ) : (
-              <>
-                <div className="score">
-                  You scored <strong>{score}</strong> / {QUESTIONS.length}
-                  <span className="verdict">
-                    {score === 5
-                      ? " — A true son or daughter of Kuwait."
-                      : score >= 3
-                      ? " — Well versed in the desert kingdom."
-                      : " — Time for another scroll through the page."}
-                  </span>
-                </div>
-                <button className="btn-primary ghost" onClick={reset}>
-                  Try Again
-                </button>
-              </>
-            )}
+        {questions ? (
+          <TriviaQuiz questions={questions} />
+        ) : (
+          <div className="quiz-error reveal">
+            <p>
+              We couldn't reach the trivia service right now. Please refresh in
+              a moment.
+            </p>
           </div>
-        </div>
+        )}
       </div>
     </section>
   );
